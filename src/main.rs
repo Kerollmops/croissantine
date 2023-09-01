@@ -12,6 +12,7 @@ use url::Url;
 use warc::{RecordType, WarcHeader};
 
 mod database;
+mod ngrams;
 mod roaring64_codec;
 
 #[derive(Parser)]
@@ -54,12 +55,6 @@ fn main() -> anyhow::Result<()> {
                     let product = readability::extractor::extract(&mut &html_body[..], &url)?;
                     println!("{:?}", product.title);
                     println!();
-
-                    if product.title.contains("Folie") {
-                        println!("{:?}", product.text);
-                        // println!("--------");
-                        // println!("{:?}", product.content);
-                    }
                 }
             }
         }
