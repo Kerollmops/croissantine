@@ -1,2 +1,3 @@
 /target
 *.warc.gz
+*.paths.gz

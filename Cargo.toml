@@ -3,10 +3,13 @@ name = "croissantine"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.75"
 clap = { version = "4.4.2", features = ["derive"] }
 flate2 = "1.0.27"
+heed = { version = "0.20.0-alpha.4", features = ["read-txn-no-tls"] }
+httparse = "1.8.0"
+readability = { version = "0.2.0", default-features = false }
+roaring = { git = "https://github.com/grim7reaper/roaring-rs", branch = "roaring64" }
+url = "2.4.1"
 warc = { version = "0.3.1", default-features = false }
