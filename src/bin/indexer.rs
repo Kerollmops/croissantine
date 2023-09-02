@@ -4,16 +4,12 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Parser;
-use database::Database;
+use croissantine::database::Database;
 use flate2::read::MultiGzDecoder;
 use heed::EnvOpenOptions;
 use httparse::{Response, Status, EMPTY_HEADER};
 use url::Url;
 use warc::{RecordType, WarcHeader};
-
-mod database;
-mod ngrams;
-mod roaring64_codec;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -55,6 +51,11 @@ fn main() -> anyhow::Result<()> {
                     let product = readability::extractor::extract(&mut &html_body[..], &url)?;
                     println!("{:?}", product.title);
                     println!();
+
+                    if product.title.contains("Folie") {
+                        println!("{}", product.text);
+                        break;
+                    }
                 }
             }
         }
