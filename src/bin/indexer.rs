@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Parser;
 use croissantine::database::Database;
+use croissantine::text::cleanup_chars;
 use croissantine::text::trigrams::TriGrams;
 use flate2::read::MultiGzDecoder;
 use heed::EnvOpenOptions;
@@ -57,7 +58,8 @@ fn main() -> anyhow::Result<()> {
                         println!("{}", product.text);
 
                         let mut map = std::collections::HashMap::<_, usize>::new();
-                        let ngrams = TriGrams::new(product.text.chars());
+                        let chars = cleanup_chars(product.text.chars());
+                        let ngrams = TriGrams::new(chars);
                         ngrams.for_each(|trigram| *map.entry(trigram).or_default() += 1);
 
                         for (trigram, count) in map.into_iter() {
