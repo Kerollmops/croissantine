@@ -1,0 +1,21 @@
+# <https://www.baeldung.com/linux/deploying-long-running-app>
+# Move it to /etc/systemd/system/croissantine.service
+# Then:
+#   systemctl start croissantine
+#   systemctl status croissantine
+#   systemctl enable croissantine
+
+[Unit]
+Description=Croissantine le Search Engine
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+ExecStart=/root/.cargo/bin/search --listen 0.0.0.0:80 --database-path /root/croissantine/croissantine.db
+
+[Install]
+WantedBy=multi-user.target
