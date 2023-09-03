@@ -17,7 +17,6 @@ use croissantine::text::cleanup_chars;
 use croissantine::text::trigrams::TriGrams;
 use heed::EnvOpenOptions;
 use roaring::MultiOps;
-use url::Url;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -50,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/", get(welcome))
         .route("/search", get(search))
         .route("/about", get(about))
+        .route("/redirect", get(redirect))
         .route("/assets/images/croissantine-logo.svg", get(assets_images_logo))
         .with_state(app_state);
 
@@ -82,7 +82,7 @@ struct ResultsTemplate {
 }
 
 struct Result {
-    link: Url,
+    link: String,
     title: String,
 }
 
@@ -119,10 +119,10 @@ async fn search(
     let count = title_bitmap.union_len(&content_bitmap);
 
     let mut results = Vec::new();
-    for docid in title_bitmap.into_iter().chain(content_bitmap).take(20) {
+    for (i, docid) in title_bitmap.into_iter().chain(content_bitmap).take(20).enumerate() {
         if let Some(url) = database.docid_uri.get(&rtxn, &docid).unwrap() {
             let title = url.to_string();
-            let link = Url::parse(url).unwrap();
+            let link = generate_redirect_url(&url, i, &query);
             results.push(Result { link, title });
         }
     }
@@ -137,6 +137,13 @@ async fn search(
     .into_response()
 }
 
+async fn redirect(Query(params): Query<HashMap<String, String>>) -> Redirect {
+    match params.get("url") {
+        Some(url) => Redirect::temporary(url),
+        None => Redirect::temporary("/"),
+    }
+}
+
 async fn about() -> Redirect {
     Redirect::temporary("https://github.com/Kerollmops/croissantine")
 }
@@ -144,4 +151,15 @@ async fn about() -> Redirect {
 async fn assets_images_logo() -> impl IntoResponse {
     let bytes = include_bytes!("../../assets/images/croissantine-logo.svg");
     ([(header::CONTENT_TYPE, "image/svg+xml")], bytes)
+}
+
+/// Generates a route that'll redirect to the link but we can have more info
+/// on the quality of the results for a given query.
+fn generate_redirect_url(url: &str, index: usize, query: &str) -> String {
+    format!(
+        "/redirect?url={}&index={}&query={}",
+        urlencoding::encode(url),
+        index,
+        urlencoding::encode(query)
+    )
 }
