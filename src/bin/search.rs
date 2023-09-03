@@ -62,10 +62,14 @@ async fn main() -> anyhow::Result<()> {
 
 #[derive(Template)]
 #[template(path = "welcome.html")]
-struct WelcomeTemplate;
+struct WelcomeTemplate {
+    total_count: u64,
+}
 
-async fn welcome() -> WelcomeTemplate {
-    WelcomeTemplate
+async fn welcome(State(state): State<Arc<AppState>>) -> WelcomeTemplate {
+    let rtxn = state.database.read_txn().unwrap();
+    let all_docids = state.database.all_docids(&rtxn).unwrap();
+    WelcomeTemplate { total_count: all_docids.len() }
 }
 
 #[derive(Template)]
