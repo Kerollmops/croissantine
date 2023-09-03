@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Croissantine le Search Engine{% endblock %}
+
+{% block head %}
+<style>
+  .main-results-container {
+      margin-bottom: 150px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav class="navbar bg-body-tertiary">
+  <div class="container-fluid">
+    <a class="navbar-brand mr-3" href="/">
+      <img src="/assets/images/croissantine-logo.svg" alt="Logo" width="30" height="24" class="d-inline-block align-text-top">
+      Croissantine
+    </a>
+    <form action="/search" method="get" role="search">
+      <div class="input-group input-group-lg">
+        <input type="text" name="query" class="form-control" aria-label="Search input" placeholder="Search for something you'll not find" autofocus autocomplete="on" value="{{ query }}" aria-describedby="button-search">
+      </div>
+    </form>
+  </div>
+</nav>
+
+<div class="container main-results-container">
+    <p class="mb-5 mt-1 fw-light">Around {{ count }} results ({{ time_taken }}) </p>
+    <ul class="list-group text-start list-group-flush list-group-numbered">
+      {% for result in results %}
+        <li class="list-group-item"><a href="{{ result.link }}">{{ result.title }}</a></li>
+      {% endfor %}
+    </ul>
+</div>
+{% endblock %}
