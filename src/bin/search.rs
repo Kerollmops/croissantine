@@ -22,6 +22,10 @@ use url::Url;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Options {
+    /// The binding to listen to.
+    #[arg(long, default_value = "0.0.0.0:3000")]
+    listen: String,
+
     /// The database path where the indexed data is stored.
     #[arg(long, default_value = "croissantine.db")]
     database_path: PathBuf,
@@ -33,7 +37,7 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let Options { database_path } = Options::parse();
+    let Options { listen, database_path } = Options::parse();
 
     let mut options = EnvOpenOptions::new();
     options.map_size(100 * 1024 * 1024 * 1024); // 100GiB
@@ -50,7 +54,8 @@ async fn main() -> anyhow::Result<()> {
         .with_state(app_state);
 
     // run it with hyper on localhost:3000
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap()).serve(app.into_make_service()).await?;
+    let addr = listen.parse().unwrap();
+    axum::Server::bind(&addr).serve(app.into_make_service()).await?;
 
     Ok(())
 }
