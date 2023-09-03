@@ -1,20 +1,20 @@
 use std::borrow::Cow;
 
 use heed::BoxedError;
-use roaring::Roaring64;
+use roaring::RoaringTreemap;
 
-pub struct Roaring64Codec;
+pub struct RoaringTreemapCodec;
 
-impl heed::BytesDecode<'_> for Roaring64Codec {
-    type DItem = Roaring64;
+impl heed::BytesDecode<'_> for RoaringTreemapCodec {
+    type DItem = RoaringTreemap;
 
     fn bytes_decode(bytes: &[u8]) -> Result<Self::DItem, BoxedError> {
-        Roaring64::deserialize_unchecked_from(bytes).map_err(Into::into)
+        RoaringTreemap::deserialize_unchecked_from(bytes).map_err(Into::into)
     }
 }
 
-impl heed::BytesEncode<'_> for Roaring64Codec {
-    type EItem = Roaring64;
+impl heed::BytesEncode<'_> for RoaringTreemapCodec {
+    type EItem = RoaringTreemap;
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
         let mut bytes = Vec::with_capacity(item.serialized_size());
