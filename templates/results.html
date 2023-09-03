@@ -12,14 +12,15 @@
 
 {% block content %}
 <nav class="navbar bg-body-tertiary">
-  <div class="container-fluid">
+  <div class="container-fluid justify-content-start">
     <a class="navbar-brand mr-3" href="/">
       <img src="/assets/images/croissantine-logo.svg" alt="Logo" width="30" height="24" class="d-inline-block align-text-top">
       Croissantine
     </a>
     <form action="/search" method="get" role="search">
-      <div class="input-group input-group-lg">
+      <div class="input-group">
         <input type="text" name="query" class="form-control" aria-label="Search input" placeholder="Search for something you'll not find" autofocus autocomplete="on" value="{{ query }}" aria-describedby="button-search">
+        <button class="btn btn-primary" type="submit" id="button-search">Search</button>
       </div>
     </form>
   </div>
