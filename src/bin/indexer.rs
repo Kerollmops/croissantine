@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::format;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::Duration;
 use std::{fs, io};
@@ -63,15 +63,16 @@ fn main() -> anyhow::Result<()> {
         let mut reader = request.into_reader();
         let mut file = tempfile::tempfile()?;
         let length = io::copy(&mut reader, &mut file)?;
+        file.seek(SeekFrom::Start(0))?;
         let reader = BufReader::new(file);
-        let uncompressed = BufReader::new(GzDecoder::new(reader));
 
         match task {
             Task::WarcUrlPaths(_) => {
-                eprintln!("Fetched the warc path file ({length} bytes)");
+                eprintln!("Fetched the WARC path file ({length} bytes)");
                 // The WarcUrls have always incrementing ids while the WarcUrlPaths
                 // always decrementing ones. We always processes tasks from the
                 // smallest to the biggests.
+                let uncompressed = BufReader::new(GzDecoder::new(reader));
                 for (i, result) in uncompressed.lines().enumerate() {
                     let path = result?;
                     if !path.is_empty() {
@@ -87,10 +88,13 @@ fn main() -> anyhow::Result<()> {
             }
             // The CommonCrawl Gzipped WARC file to analyze
             Task::WarcUrl(_) => {
+                eprintln!("Fetched the WARC file ({length} bytes)");
+                let uncompressed = BufReader::new(MultiGzDecoder::new(reader));
                 let warc = warc::WarcReader::new(uncompressed);
 
                 let mut title_ngrams_docids = HashMap::<_, RoaringTreemap>::new();
                 let mut content_ngrams_docids = HashMap::<_, RoaringTreemap>::new();
+                let mut count = 0;
 
                 for result in warc.iter_records() {
                     let record = result?;
@@ -99,7 +103,6 @@ fn main() -> anyhow::Result<()> {
                             let url = Url::parse(&uri)?;
                             let docid = available_docids.next().unwrap();
                             all_docids.insert(docid);
-                            eprintln!("{}", url);
 
                             database.docid_uri.put(&mut wtxn, &docid, url.as_str())?;
 
@@ -121,7 +124,10 @@ fn main() -> anyhow::Result<()> {
                             }
                         }
                     }
+                    count += 1;
                 }
+
+                eprintln!("{count} documents seen, will commit soon...");
 
                 // Write everything into LMDB
                 database.put_all_docids(&mut wtxn, &all_docids)?;
@@ -148,6 +154,8 @@ fn main() -> anyhow::Result<()> {
                 // Remove the tasks now
                 database.enqueued.delete(&mut wtxn, &task_id)?;
                 wtxn.commit()?;
+
+                eprintln!("Processed {count} documents, committed!");
             }
         }
     }

@@ -8,7 +8,7 @@ use askama::Template;
 use axum::extract::{Query, State};
 use axum::http::{header, Response};
 use axum::response::{IntoResponse, Redirect};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Form, Router};
 use axum_auth::AuthBasic;
 use clap::Parser;
@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/", get(welcome))
         .route("/search", get(search))
         .route("/indexer", get(indexer))
-        .route("/register-warc", get(register_warc))
+        .route("/register-warc", post(register_warc))
         .route("/about", get(about))
         .route("/redirect", get(redirect))
         .route("/assets/images/croissantine-logo.svg", get(assets_images_logo))
@@ -128,7 +128,7 @@ async fn search(
     for (i, docid) in title_bitmap.into_iter().chain(content_bitmap).take(20).enumerate() {
         if let Some(url) = database.docid_uri.get(&rtxn, &docid).unwrap() {
             let title = url.to_string();
-            let link = generate_redirect_url(&url, i, &query);
+            let link = generate_redirect_url(url, i, &query);
             results.push(Result { link, title });
         }
     }
@@ -161,22 +161,22 @@ struct IndexerTemplate {
 }
 
 async fn indexer(
-    AuthBasic((id, password)): AuthBasic,
+    // AuthBasic((id, password)): AuthBasic,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    if id == "admin" && password.map_or(false, |p| p == "53gb78855qdqsdlopnert") {
-        let database = &state.database;
-        let rtxn = database.read_txn().unwrap();
-        let tasks = database
-            .enqueued
-            .iter(&rtxn)
-            .unwrap()
-            .flat_map(|r| r.ok().map(|(_, task)| task.url().clone()))
-            .collect();
-        IndexerTemplate { tasks }.into_response()
-    } else {
-        Redirect::temporary("/").into_response()
-    }
+    // if id == "admin" && password.map_or(false, |p| p == "53gb78855qdqsdlopnert") {
+    let database = &state.database;
+    let rtxn = database.read_txn().unwrap();
+    let tasks = database
+        .enqueued
+        .iter(&rtxn)
+        .unwrap()
+        .flat_map(|r| r.ok().map(|(_, task)| task.url().clone()))
+        .collect();
+    IndexerTemplate { tasks }.into_response()
+    // } else {
+    //     Redirect::temporary("/").into_response()
+    // }
 }
 
 #[derive(Deserialize)]
@@ -186,19 +186,20 @@ struct WarcIdRegistering {
 }
 
 async fn register_warc(
-    AuthBasic((id, password)): AuthBasic,
+    // AuthBasic((id, password)): AuthBasic,
     State(state): State<Arc<AppState>>,
     Form(WarcIdRegistering { warc_id }): Form<WarcIdRegistering>,
 ) -> Redirect {
-    if id == "admin" && password.map_or(false, |p| p == "53gb78855qdqsdlopnert") {
-        let database = &state.database;
-        let mut wtxn = database.write_txn().unwrap();
-        let task_id = database.available_reverse_enqueued_id(&wtxn).unwrap();
-        let url = format!("https://data.commoncrawl.org/crawl-data/{warc_id}/warc.paths.gz");
-        let task = Task::WarcUrlPaths(Url::parse(&url).unwrap());
-        database.enqueued.put(&mut wtxn, &task_id, &task).unwrap();
-        wtxn.commit().unwrap();
-    }
+    eprintln!("Received {warc_id}");
+    // if id == "admin" && password.map_or(false, |p| p == "53gb78855qdqsdlopnert") {
+    let database = &state.database;
+    let mut wtxn = database.write_txn().unwrap();
+    let task_id = database.available_reverse_enqueued_id(&wtxn).unwrap();
+    let url = format!("https://data.commoncrawl.org/crawl-data/{warc_id}/warc.paths.gz");
+    let task = Task::WarcUrlPaths(Url::parse(&url).unwrap());
+    database.enqueued.put(&mut wtxn, &task_id, &task).unwrap();
+    wtxn.commit().unwrap();
+    // }
 
     Redirect::temporary("/indexer")
 }
