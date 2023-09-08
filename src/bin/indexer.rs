@@ -3,7 +3,7 @@ use std::fmt::format;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{fs, io};
 
 use anyhow::Context;
@@ -89,6 +89,7 @@ fn main() -> anyhow::Result<()> {
             // The CommonCrawl Gzipped WARC file to analyze
             Task::WarcUrl(_) => {
                 eprintln!("Fetched the WARC file ({length} bytes)");
+                let before = Instant::now();
                 let uncompressed = BufReader::new(MultiGzDecoder::new(reader));
                 let warc = warc::WarcReader::new(uncompressed);
 
@@ -127,7 +128,10 @@ fn main() -> anyhow::Result<()> {
                     count += 1;
                 }
 
-                eprintln!("{count} documents seen, will commit soon...");
+                eprintln!(
+                    "{count} documents seen in {:.02?}, will commit soon...",
+                    before.elapsed()
+                );
 
                 // Write everything into LMDB
                 database.put_all_docids(&mut wtxn, &all_docids)?;
@@ -155,7 +159,7 @@ fn main() -> anyhow::Result<()> {
                 database.enqueued.delete(&mut wtxn, &task_id)?;
                 wtxn.commit()?;
 
-                eprintln!("Processed {count} documents, committed!");
+                eprintln!("Processed {count} documents in {:.02?}, committed!", before.elapsed());
             }
         }
     }
