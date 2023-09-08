@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use heed::byteorder::BE;
-use heed::types::{Str, U64};
+use heed::types::{SerdeJson, Str, U32, U64};
 use heed::{Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringTreemap;
 
+use crate::task::Task;
 use crate::treemap_codec::RoaringTreemapCodec;
 
 pub struct Database {
@@ -13,6 +14,7 @@ pub struct Database {
     pub title_ngrams_docids: heed::Database<Str, RoaringTreemapCodec>,
     pub content_ngrams_docids: heed::Database<Str, RoaringTreemapCodec>,
     pub docid_uri: heed::Database<U64<BE>, Str>,
+    pub enqueued: heed::Database<U32<BE>, SerdeJson<Task>>,
 }
 
 impl Database {
@@ -27,9 +29,10 @@ impl Database {
         let content_ngrams_docids =
             env.create_database(&mut wtxn, Some("content-ngrams-docids"))?;
         let docid_uri = env.create_database(&mut wtxn, Some("docid-uri"))?;
+        let enqueued = env.create_database(&mut wtxn, Some("enqueued"))?;
         wtxn.commit()?;
 
-        Ok(Database { env, main, title_ngrams_docids, content_ngrams_docids, docid_uri })
+        Ok(Database { env, main, title_ngrams_docids, content_ngrams_docids, docid_uri, enqueued })
     }
 
     pub fn read_txn(&self) -> heed::Result<RoTxn> {

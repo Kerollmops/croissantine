@@ -12,9 +12,9 @@ use axum::routing::get;
 use axum::Router;
 use clap::Parser;
 use croissantine::database::Database;
-use croissantine::encode_trigram;
 use croissantine::text::cleanup_chars;
 use croissantine::text::trigrams::TriGrams;
+use croissantine::{encode_trigram, DATABASE_MAX_SIZE};
 use heed::EnvOpenOptions;
 use roaring::MultiOps;
 
@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     let Options { listen, database_path } = Options::parse();
 
     let mut options = EnvOpenOptions::new();
-    options.map_size(100 * 1024 * 1024 * 1024); // 100GiB
+    options.map_size(DATABASE_MAX_SIZE);
     fs::create_dir_all(&database_path)?;
     let database = Database::open_or_create(options, database_path)?;
     let app_state = Arc::new(AppState { database });

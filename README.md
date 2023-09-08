@@ -4,7 +4,7 @@ An open source french search engine experiment using the Common Crawl WARC files
 
 <https://index.commoncrawl.org/collinfo.json>
 
-<https://data.commoncrawl.org/crawl-data/CC-MAIN-2022-05/warc.paths.gz>
+<https://data.commoncrawl.org/crawl-data/CC-MAIN-2023-23/warc.paths.gz>
 
 ## Deploy on the already running instance
 
