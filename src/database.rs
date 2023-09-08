@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use heed::byteorder::BE;
-use heed::types::{SerdeJson, Str, U32, U64};
+use heed::types::{DecodeIgnore, SerdeJson, Str, U32, U64};
 use heed::{Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringTreemap;
 
@@ -52,5 +52,16 @@ impl Database {
 
     pub fn put_all_docids(&self, wtxn: &mut RwTxn, bitmap: &RoaringTreemap) -> heed::Result<()> {
         self.main.remap_types::<Str, RoaringTreemapCodec>().put(wtxn, "all-docids", bitmap)
+    }
+
+    pub fn available_reverse_enqueued_id(&self, rtxn: &RoTxn) -> heed::Result<u32> {
+        let iter = self.enqueued.rev_iter(rtxn)?.remap_data_type::<DecodeIgnore>();
+        for (result, expected) in iter.zip((0..=u32::MAX).rev()) {
+            let (task_id, _) = result?;
+            if task_id != expected {
+                return Ok(expected);
+            }
+        }
+        Ok(u32::MAX)
     }
 }

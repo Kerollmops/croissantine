@@ -8,6 +8,7 @@ anyhow = "1.0.75"
 askama = "0.12.0"
 askama_axum = "0.3.0"
 axum = "0.6.20"
+axum-auth = { version = "0.4", default-features = false, features = ["auth-basic"] }
 clap = { version = "4.4.2", features = ["derive"] }
 flate2 = "1.0.27"
 heed = { version = "0.20.0-alpha.4", features = ["read-txn-no-tls"] }
