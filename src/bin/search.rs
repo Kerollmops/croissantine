@@ -6,11 +6,10 @@ use std::{fs, include_bytes};
 
 use askama::Template;
 use axum::extract::{Query, State};
-use axum::http::{header, Response};
+use axum::http::header;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, post};
 use axum::{Form, Router};
-use axum_auth::AuthBasic;
 use clap::Parser;
 use croissantine::database::Database;
 use croissantine::task::Task;

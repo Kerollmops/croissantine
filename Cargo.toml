@@ -13,6 +13,7 @@ clap = { version = "4.4.2", features = ["derive"] }
 flate2 = "1.0.27"
 heed = { version = "0.20.0-alpha.4", features = ["read-txn-no-tls"] }
 httparse = "1.8.0"
+rayon = "1.7.0"
 readability = { path = "../readability", default-features = false }
 roaring = "0.10.2"
 serde = { version = "1.0.188", features = ["derive"] }

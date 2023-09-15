@@ -1,12 +1,9 @@
 use std::collections::HashMap;
-use std::fmt::format;
-use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::{fs, io};
 
-use anyhow::Context;
 use clap::Parser;
 use croissantine::available_docids_iter::AvailableDocIds;
 use croissantine::database::Database;
@@ -18,8 +15,8 @@ use flate2::bufread::GzDecoder;
 use flate2::read::MultiGzDecoder;
 use heed::EnvOpenOptions;
 use httparse::{Response, Status, EMPTY_HEADER};
+use rayon::prelude::{ParallelBridge, ParallelIterator};
 use roaring::RoaringTreemap;
-use tempfile::tempfile;
 use url::Url;
 use warc::{RecordType, WarcHeader};
 
@@ -55,20 +52,21 @@ fn main() -> anyhow::Result<()> {
 
         drop(tasks);
 
-        let mut all_docids = database.all_docids(&wtxn)?;
-        let mut available_docids = AvailableDocIds::new(&all_docids);
-
         let url = task.url();
         let request = ureq::get(url.as_str()).call()?;
         let mut reader = request.into_reader();
         let mut file = tempfile::tempfile()?;
+        let before = Instant::now();
         let length = io::copy(&mut reader, &mut file)?;
         file.seek(SeekFrom::Start(0))?;
         let reader = BufReader::new(file);
 
         match task {
             Task::WarcUrlPaths(_) => {
-                eprintln!("Fetched the WARC path file ({length} bytes)");
+                eprintln!(
+                    "Fetched the WARC path file ({length} bytes) in {:.02?}",
+                    before.elapsed()
+                );
                 // The WarcUrls have always incrementing ids while the WarcUrlPaths
                 // always decrementing ones. We always processes tasks from the
                 // smallest to the biggests.
@@ -88,24 +86,29 @@ fn main() -> anyhow::Result<()> {
             }
             // The CommonCrawl Gzipped WARC file to analyze
             Task::WarcUrl(_) => {
-                eprintln!("Fetched the WARC file ({length} bytes)");
+                eprintln!("Fetched the WARC file ({length} bytes) in {:.02?}", before.elapsed());
                 let before = Instant::now();
                 let uncompressed = BufReader::new(MultiGzDecoder::new(reader));
                 let warc = warc::WarcReader::new(uncompressed);
 
-                let mut title_ngrams_docids = HashMap::<_, RoaringTreemap>::new();
-                let mut content_ngrams_docids = HashMap::<_, RoaringTreemap>::new();
-                let mut count = 0;
+                let mut all_docids = database.all_docids(&wtxn)?;
+                let available_docids = AvailableDocIds::new(&all_docids);
 
-                for result in warc.iter_records() {
-                    let record = result?;
-                    if record.warc_type() == &RecordType::Response {
-                        if let Some(uri) = record.header(WarcHeader::TargetURI) {
-                            let url = Url::parse(&uri)?;
-                            let docid = available_docids.next().unwrap();
-                            all_docids.insert(docid);
+                let IndexingOutput { title_ngrams_docids, content_ngrams_docids, docids, urls } =
+                    warc.iter_records()
+                        .zip(available_docids)
+                        .par_bridge()
+                        .map(|(result, docid)| {
+                            let record = result.unwrap();
+                            let uri =
+                                match (record.warc_type(), record.header(WarcHeader::TargetURI)) {
+                                    (RecordType::Response, Some(uri)) => uri,
+                                    _ => return None,
+                                };
 
-                            database.docid_uri.put(&mut wtxn, &docid, url.as_str())?;
+                            let url = Url::parse(&uri).unwrap();
+                            let mut title_ngrams_docids = HashMap::<_, RoaringTreemap>::new();
+                            let mut content_ngrams_docids = HashMap::<_, RoaringTreemap>::new();
 
                             let mut headers = [EMPTY_HEADER; 64];
                             let mut req = Response::new(&mut headers);
@@ -113,7 +116,8 @@ fn main() -> anyhow::Result<()> {
                             if let Ok(Status::Complete(size)) = req.parse(http_body) {
                                 let html_body = &http_body[size..];
                                 let product =
-                                    readability::extractor::extract(&mut &html_body[..], &url)?;
+                                    readability::extractor::extract(&mut &html_body[..], &url)
+                                        .unwrap();
 
                                 for trigram in TriGrams::new(cleanup_chars(product.title.chars())) {
                                     title_ngrams_docids.entry(trigram).or_default().insert(docid);
@@ -123,15 +127,31 @@ fn main() -> anyhow::Result<()> {
                                     content_ngrams_docids.entry(trigram).or_default().insert(docid);
                                 }
                             }
-                        }
-                    }
-                    count += 1;
-                }
+
+                            Some(IndexingOutput {
+                                title_ngrams_docids,
+                                content_ngrams_docids,
+                                docids: RoaringTreemap::from_iter([docid]),
+                                urls: vec![url],
+                            })
+                        })
+                        .flatten()
+                        .reduce(IndexingOutput::default, IndexingOutput::merge);
+
+                let count = docids.len();
 
                 eprintln!(
                     "{count} documents seen in {:.02?}, will commit soon...",
                     before.elapsed()
                 );
+                
+                let before_commit = Instant::now();
+
+                for (docid, url) in docids.iter().zip(urls) {
+                    database.docid_uri.put(&mut wtxn, &docid, url.as_str())?;
+                }
+
+                all_docids |= docids;
 
                 // Write everything into LMDB
                 database.put_all_docids(&mut wtxn, &all_docids)?;
@@ -159,8 +179,36 @@ fn main() -> anyhow::Result<()> {
                 database.enqueued.delete(&mut wtxn, &task_id)?;
                 wtxn.commit()?;
 
+                eprintln!("Writing into the database took {:.02?}", before_commit.elapsed());
                 eprintln!("Processed {count} documents in {:.02?}, committed!", before.elapsed());
             }
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct IndexingOutput {
+    title_ngrams_docids: HashMap<[char; 3], RoaringTreemap>,
+    content_ngrams_docids: HashMap<[char; 3], RoaringTreemap>,
+    docids: RoaringTreemap,
+    urls: Vec<Url>,
+}
+
+impl IndexingOutput {
+    fn merge(mut self, other: Self) -> Self {
+        let IndexingOutput { title_ngrams_docids, content_ngrams_docids, docids, mut urls } = other;
+
+        for (ngram, docids) in title_ngrams_docids {
+            *self.title_ngrams_docids.entry(ngram).or_default() |= docids;
+        }
+
+        for (ngram, docids) in content_ngrams_docids {
+            *self.content_ngrams_docids.entry(ngram).or_default() |= docids;
+        }
+
+        self.urls.append(&mut urls);
+        self.docids |= docids;
+
+        self
     }
 }
